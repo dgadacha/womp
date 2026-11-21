@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "735532976701",
+    "project_id": "womp-crew",
+    "storage_bucket": "womp-crew.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:735532976701:android:72dd4a4fa0b8cff1a5b854",
+        "android_client_info": {
+          "package_name": "app.womp.womp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBJ-243as4DTTVz9XKMgVWg8l-isKYTFSY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
