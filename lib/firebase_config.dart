@@ -23,12 +23,21 @@ FirebaseOptions get _demoOptions => FirebaseOptions(
       projectId: 'demo-womp',
     );
 
+/// L'app Firebase utilisée par tout le code. Ne jamais passer par `.instance` :
+/// en mode émulateur ce n'est pas l'app par défaut.
+late final FirebaseApp firebaseApp;
+
+FirebaseAuth get auth => FirebaseAuth.instanceFor(app: firebaseApp);
+FirebaseFirestore get firestore => FirebaseFirestore.instanceFor(app: firebaseApp);
+
 Future<void> initFirebase() async {
-  await Firebase.initializeApp(
-    options: useEmulator ? _demoOptions : DefaultFirebaseOptions.currentPlatform,
-  );
-  if (useEmulator) {
-    await FirebaseAuth.instance.useAuthEmulator('localhost', authPort);
-    FirebaseFirestore.instance.useFirestoreEmulator('localhost', firestorePort);
+  if (!useEmulator) {
+    firebaseApp = await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+    return;
   }
+  // Les fichiers natifs configurent déjà l'app par défaut sur le vrai projet.
+  // L'émulateur passe donc par une app à part, sous un nom à elle.
+  firebaseApp = await Firebase.initializeApp(name: 'emulator', options: _demoOptions);
+  await auth.useAuthEmulator('localhost', authPort);
+  firestore.useFirestoreEmulator('localhost', firestorePort);
 }

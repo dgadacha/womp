@@ -11,6 +11,10 @@ Future<void> main() async {
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   final store = Store();
   await store.load();
-  await initFirebase();
+  try {
+    await initFirebase();
+  } catch (_) {
+    // L'app démarre quand même : l'écran d'erreur prend le relais, pas un écran blanc.
+  }
   runApp(WompApp(store: store, repo: FirestoreRepo()));
 }

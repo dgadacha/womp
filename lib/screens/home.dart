@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../config.dart';
 import '../core/game.dart';
+import '../core/games.dart';
 import '../data/repo.dart';
 import '../ui/kit.dart';
 
@@ -10,6 +11,7 @@ class HomeScreen extends StatelessWidget {
   const HomeScreen({
     super.key,
     required this.crew,
+    required this.game,
     required this.scores,
     required this.day,
     required this.streak,
@@ -17,6 +19,7 @@ class HomeScreen extends StatelessWidget {
   });
 
   final Crew crew;
+  final GameId game;
   final Map<String, int> scores;
   final String day;
   final int streak;
@@ -75,9 +78,9 @@ class HomeScreen extends StatelessWidget {
                           children: [
                             Overline("Today's game · ${prettyDay(day)}"),
                             const SizedBox(height: 6),
-                            const Text(
-                              gameName,
-                              style: TextStyle(
+                            Text(
+                              gameTitle(game),
+                              style: const TextStyle(
                                 fontSize: 44, fontWeight: FontWeight.w900, letterSpacing: -1.5, height: 1.05,
                               ),
                             ),
@@ -87,9 +90,7 @@ class HomeScreen extends StatelessWidget {
                               style: const TextStyle(fontSize: 16),
                             ),
                             const SizedBox(height: 14),
-                            const _Rule(color: Tone.mint, text: 'Green: +1'),
-                            const _Rule(color: Tone.sun, text: 'Yellow: +3, gone in a blink'),
-                            const _Rule(color: Tone.tomato, text: "Red: −3, don't touch"),
+                            ..._rulesOf(game),
                           ],
                         ),
                       ),
@@ -105,6 +106,25 @@ class HomeScreen extends StatelessWidget {
     );
   }
 }
+
+List<Widget> _rulesOf(GameId game) => switch (game) {
+      GameId.snap => const [
+          _Rule(color: Tone.mint, text: 'Green: +1'),
+          _Rule(color: Tone.sun, text: 'Yellow: +3, gone in a blink'),
+          _Rule(color: Tone.tomato, text: "Red: −3, don't touch"),
+        ],
+      GameId.spot => const [
+          _Rule(color: Tone.ink, text: 'One arrow points the wrong way. Tap it.'),
+          _Rule(color: Tone.mint, text: 'Right one: +1'),
+          _Rule(color: Tone.tomato, text: 'Wrong one: −1'),
+        ],
+      GameId.stop => const [
+          _Rule(color: Tone.ink, text: 'Tap to stop the bar.'),
+          _Rule(color: Tone.tomato, text: 'Red centre: +3'),
+          _Rule(color: Tone.sun, text: 'Yellow zone: +1'),
+          _Rule(color: Tone.paper, text: 'Outside: −1'),
+        ],
+    };
 
 class _Rule extends StatelessWidget {
   const _Rule({required this.color, required this.text});

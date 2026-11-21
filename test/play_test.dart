@@ -2,7 +2,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:womp/core/game.dart';
-import 'package:womp/screens/play.dart';
+import 'package:womp/games/snap_game.dart';
 
 void main() {
   testWidgets('a touch on a target scores on pointer down, and the round ends', (tester) async {
@@ -13,7 +13,7 @@ void main() {
     ];
     int? result;
     await tester.pumpWidget(MaterialApp(
-      home: PlayScreen(plan: plan, durationMs: 4500, onDone: (s) => result = s),
+      home: SnapGame(plan: plan, durationMs: 4500, onDone: (s) => result = s),
     ));
     await tester.pump(); // premier tick
 

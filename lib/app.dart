@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 
 import 'config.dart';
 import 'core/game.dart';
+import 'core/games.dart';
 import 'core/store.dart';
 import 'data/repo.dart';
+import 'firebase_config.dart' show useEmulator;
 import 'screens/crew.dart';
 import 'screens/home.dart';
 import 'screens/onboarding.dart';
@@ -25,7 +27,8 @@ class WompApp extends StatefulWidget {
 
 class _WompAppState extends State<WompApp> {
   final String _day = dayKey();
-  late final List<Spawn> _plan = buildPlan(_day, roundMs);
+  // Forcer un jeu fausserait le classement d'une vraie bande : seulement sur l'émulateur.
+  late final GameId _game = (useEmulator ? gameNamed(forcedGame) : null) ?? gameOfDay(_day);
   final List<StreamSubscription<void>> _subs = [];
 
   bool _booting = true;
@@ -142,7 +145,7 @@ class _WompAppState extends State<WompApp> {
       );
     }
     if (_playing) {
-      return PlayScreen(plan: _plan, durationMs: roundMs, onDone: _finishRound);
+      return PlayScreen(game: _game, day: _day, durationMs: roundMs, onDone: _finishRound);
     }
     final uid = _repo.uid;
     // Le score du serveur fait foi : c'est le premier posté qui compte.
@@ -150,6 +153,7 @@ class _WompAppState extends State<WompApp> {
     if (mine == null) {
       return HomeScreen(
         crew: crew,
+        game: _game,
         scores: _scores!,
         day: _day,
         streak: _store.streak(),

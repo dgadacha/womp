@@ -1,11 +1,12 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+import '../firebase_config.dart';
 import 'repo.dart';
 
 class FirestoreRepo implements Repo {
-  FirebaseFirestore get _db => FirebaseFirestore.instance;
-  FirebaseAuth get _auth => FirebaseAuth.instance;
+  FirebaseFirestore get _db => firestore;
+  FirebaseAuth get _auth => auth;
 
   @override
   String get uid => _auth.currentUser!.uid;
