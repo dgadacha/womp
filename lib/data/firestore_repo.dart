@@ -13,6 +13,17 @@ class FirestoreRepo implements Repo {
 
   @override
   Future<void> init() async {
+    final user = _auth.currentUser;
+    if (user != null) {
+      // Le téléphone garde le compte même après une réinstallation. S'il n'existe
+      // plus côté serveur, on repart d'un compte neuf au lieu de rester bloqué.
+      try {
+        await user.reload();
+      } on FirebaseAuthException catch (e) {
+        if (e.code == 'network-request-failed') return; // hors ligne : on garde le compte
+        await _auth.signOut();
+      }
+    }
     if (_auth.currentUser == null) await _auth.signInAnonymously();
   }
 
