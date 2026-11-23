@@ -18,6 +18,12 @@ service cloud.firestore {
         && goodName(request.resource.data.name);
     }
 
+    // Réglages de l'app, changés à la main dans la console. Ex. config/app.pass : le Womp Pass est visible.
+    match /config/{doc} {
+      allow get: if signedIn();
+      allow list, write: if false;
+    }
+
     // Invitation : on la lit en connaissant son code, on ne peut pas les lister.
     match /invites/{code} {
       allow get: if signedIn();
@@ -60,11 +66,23 @@ service cloud.firestore {
             )
           )
         )
-        // Le créateur choisit le type de gages, et rien d'autre.
+        // Le créateur choisit le type de gages, et rien d'autre. Les packs du Pass
+        // demandent une bande débloquée.
         || (
           resource.data.createdBy == me()
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['dares'])
-          && request.resource.data.dares in ['classic', 'party']
+          && (
+            request.resource.data.dares in ['classic', 'party']
+            || (request.resource.data.dares in ['truth', 'chaos'] && 'passBy' in resource.data)
+          )
+        )
+        // Un membre qui a le Womp Pass débloque la bande, à son nom, une fois pour toutes.
+        // L'achat lui-même n'est pas vérifié ici : voir les limites dans le README.
+        || (
+          me() in resource.data.members
+          && !('passBy' in resource.data)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['passBy'])
+          && request.resource.data.passBy == me()
         )
         // Un membre quitte la bande : il ne retire que lui-même.
         || (

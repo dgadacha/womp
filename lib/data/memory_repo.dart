@@ -1,14 +1,18 @@
 import 'dart:async';
 
+import '../core/game.dart';
 import 'repo.dart';
 
 /// Version en mémoire du serveur, pour les tests. Elle applique les mêmes règles
 /// que Firestore : 12 membres au plus, une manche qui ne fait qu'avancer.
 class MemoryRepo implements Repo {
-  MemoryRepo({this.uid = 'me'});
+  MemoryRepo({this.uid = 'me', this.passOn = false});
 
   @override
   final String uid;
+
+  /// L'interrupteur du Pass côté serveur.
+  bool passOn;
 
   final Map<String, Crew> crews = {};
   final Map<String, String> crewOfUser = {};
@@ -31,7 +35,12 @@ class MemoryRepo implements Repo {
   Future<Crew?> myCrew() async => crews[crewOfUser[uid]];
 
   /// Ajoute une bande toute faite (pour préparer un test).
-  Crew seedCrew({required String name, required Map<String, String> names, String code = 'ABC234'}) {
+  Crew seedCrew({
+    required String name,
+    required Map<String, String> names,
+    String code = 'ABC234',
+    String passBy = '',
+  }) {
     final crew = Crew(
       id: 'crew${_next++}',
       name: name,
@@ -39,12 +48,19 @@ class MemoryRepo implements Repo {
       members: names.keys.toList(),
       names: Map.of(names),
       createdBy: names.keys.first,
+      passBy: passBy,
     );
     crews[crew.id] = crew;
     for (final u in names.keys) {
       crewOfUser[u] = crew.id;
     }
     return crew;
+  }
+
+  /// Change une bande comme le ferait un autre joueur (pour un test).
+  void updateCrew(String crewId, Crew Function(Crew) change) {
+    crews[crewId] = change(crews[crewId]!);
+    _bump();
   }
 
   @override
@@ -63,14 +79,9 @@ class MemoryRepo implements Repo {
     if (!crew.members.contains(uid) && crew.members.length >= maxCrewSize) {
       throw const JoinFailure(JoinProblem.fullOrRefused);
     }
-    final joined = Crew(
-      id: crew.id,
-      name: crew.name,
-      code: crew.code,
+    final joined = crew.copyWith(
       members: [...crew.members, if (!crew.members.contains(uid)) uid],
       names: {...crew.names, uid: myName},
-      createdBy: crew.createdBy,
-      darePack: crew.darePack,
     );
     crews[crew.id] = joined;
     crewOfUser[uid] = crew.id;
@@ -84,15 +95,7 @@ class MemoryRepo implements Repo {
   @override
   Future<void> leaveCrew(String crewId) async {
     final crew = crews[crewId]!;
-    crews[crewId] = Crew(
-      id: crew.id,
-      name: crew.name,
-      code: crew.code,
-      members: [for (final m in crew.members) if (m != uid) m],
-      names: crew.names,
-      createdBy: crew.createdBy,
-      darePack: crew.darePack,
-    );
+    crews[crewId] = crew.copyWith(members: [for (final m in crew.members) if (m != uid) m]);
     crewOfUser.remove(uid);
     _bump();
   }
@@ -100,18 +103,21 @@ class MemoryRepo implements Repo {
   @override
   Future<void> setDarePack({required String crewId, required String pack}) async {
     final crew = crews[crewId]!;
-    if (crew.createdBy != uid || (pack != 'classic' && pack != 'party')) {
+    if (crew.createdBy != uid || !darePacks.contains(pack) || (passPacks.contains(pack) && !crew.unlocked)) {
       throw StateError('permission-denied');
     }
-    crews[crewId] = Crew(
-      id: crew.id,
-      name: crew.name,
-      code: crew.code,
-      members: crew.members,
-      names: crew.names,
-      createdBy: crew.createdBy,
-      darePack: pack,
-    );
+    crews[crewId] = crew.copyWith(darePack: pack);
+    _bump();
+  }
+
+  @override
+  Future<bool> passSwitch() async => passOn;
+
+  @override
+  Future<void> unlockCrew(String crewId) async {
+    final crew = crews[crewId]!;
+    if (!crew.members.contains(uid) || crew.unlocked) throw StateError('permission-denied');
+    crews[crewId] = crew.copyWith(passBy: uid);
     _bump();
   }
 

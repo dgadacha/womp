@@ -110,5 +110,10 @@ const dareCount = 8;
 
 const packClassic = 'classic';
 const packParty = 'party';
-const darePacks = [packClassic, packParty];
+const packTruth = 'truth';
+const packChaos = 'chaos';
+const darePacks = [packClassic, packParty, packTruth, packChaos];
+
+/// Packs réservés aux bandes débloquées par le Womp Pass.
+const passPacks = {packTruth, packChaos};
 

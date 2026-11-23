@@ -7,6 +7,7 @@ import 'config.dart';
 import 'core/game.dart';
 import 'core/games.dart';
 import 'core/store.dart';
+import 'data/pass.dart';
 import 'data/repo.dart';
 import 'firebase_config.dart' show useEmulator;
 import 'l10n/strings.dart';
@@ -17,9 +18,12 @@ import 'ui/kit.dart';
 /// Racine de l'app : connecte l'appareil, retrouve la bande et la suit en direct.
 /// Sans bande, on arrive sur l'accueil ; avec une bande, dans son salon de jeu.
 class WompApp extends StatefulWidget {
-  const WompApp({super.key, required this.store, required this.repo, this.locale});
+  const WompApp({super.key, required this.store, required this.repo, this.pass, this.locale});
   final Store store;
   final Repo repo;
+
+  /// Le Womp Pass. Absent : pas de magasin, le Pass reste caché.
+  final PassController? pass;
 
   /// Langue imposée (tests, --dart-define=LOCALE=fr). Sinon, celle du téléphone.
   final Locale? locale;
@@ -37,19 +41,49 @@ class _WompAppState extends State<WompApp> {
   bool _bootFailed = false;
   Crew? _crew;
 
+  late final PassController _pass = widget.pass ?? PassController();
+  bool _passLoading = false;
+  final _unlockTried = <String>{}; // bandes déjà débloquées, ou tentées, depuis ce téléphone
+
   Store get _store => widget.store;
   Repo get _repo => widget.repo;
 
   @override
   void initState() {
     super.initState();
+    _pass.addListener(_onPass);
     _boot();
   }
 
   @override
   void dispose() {
     _crewSub?.cancel();
+    _pass.removeListener(_onPass);
     super.dispose();
+  }
+
+  /// Le Pass se charge à côté, sans retarder l'arrivée dans l'app. Interrupteur
+  /// éteint : une seule lecture sur le serveur, et le magasin n'est jamais contacté.
+  Future<void> _loadPass() async {
+    if (_passLoading || _pass.visible) return;
+    _passLoading = true;
+    final remoteSwitch = await _repo.passSwitch();
+    await _pass.load(remoteSwitch: remoteSwitch, uid: _repo.uid);
+    _passLoading = false;
+  }
+
+  void _onPass() {
+    if (!mounted) return;
+    setState(() {});
+    _unlockTried.clear(); // le Pass vient peut-être d'être acheté ou retrouvé
+    _maybeUnlock();
+  }
+
+  /// Un joueur qui a le Pass débloque la bande où il se trouve.
+  void _maybeUnlock() {
+    final crew = _crew;
+    if (crew == null || crew.unlocked || !_pass.visible || !_pass.owned || !_unlockTried.add(crew.id)) return;
+    _repo.unlockCrew(crew.id).catchError((_) {});
   }
 
   Future<void> _boot() async {
@@ -59,6 +93,7 @@ class _WompAppState extends State<WompApp> {
     });
     try {
       await _repo.init();
+      unawaited(_loadPass());
       final crew = await _repo.myCrew();
       if (!mounted) return;
       if (crew != null) {
@@ -78,11 +113,15 @@ class _WompAppState extends State<WompApp> {
 
   void _enter(Crew crew) {
     _crewSub?.cancel();
-    _crewSub = _repo.watchCrew(crew.id).listen((c) => setState(() => _crew = c), onError: (_) {});
+    _crewSub = _repo.watchCrew(crew.id).listen((c) {
+      setState(() => _crew = c);
+      _maybeUnlock();
+    }, onError: (_) {});
     setState(() {
       _crew = crew;
       _booting = false;
     });
+    _maybeUnlock();
   }
 
   void _left() {
@@ -135,6 +174,7 @@ class _WompAppState extends State<WompApp> {
       locale: _store.locale,
       onLocale: _setLocale,
       forcedGame: _forcedGame,
+      pass: _pass,
     );
   }
 

@@ -72,6 +72,11 @@ def get(token, path):
     return call("GET", f"{BASE}/{ROOT}/{path}", token)[0]
 
 
+def admin_write(path, fields):
+    # « owner » passe outre les règles : c'est la console Firebase de l'émulateur.
+    return commit("owner", write(path, fields))
+
+
 def check(label, status, allowed):
     ok = (status == 200) == allowed
     results.append(ok)
@@ -140,6 +145,27 @@ def main():
     check("C, non membre, change les gages", dares(tc, "party"), False)
     check("A met un type de gages inconnu", dares(ta, "vodka"), False)
     check("A change les gages et le nom de la bande ensemble", dares(ta, "party", {"name": "Pirates"}), False)
+
+    # Womp Pass : l'interrupteur se lit, ne s'écrit pas ; un membre débloque la bande une fois.
+    admin_write("config/app", {"pass": False})
+    check("B lit l'interrupteur du Pass", get(tb, "config/app"), True)
+    check("Sans compte, lecture de l'interrupteur", get(None, "config/app"), False)
+    check("B allume le Pass pour tout le monde", commit(tb, write("config/app", {"pass": True})), False)
+    check("B liste les réglages", get(tb, "config"), False)
+    unlock = lambda tok, who, extra=None: commit(tok, write(
+        f"crews/{crew}", {"passBy": who, **(extra or {})}, exists=True,
+        mask=["passBy"] + list((extra or {}).keys()),
+    ))
+    check("A passe aux gages Vérité sans Pass", dares(ta, "truth"), False)
+    check("C, non membre, débloque la bande", unlock(tc, c), False)
+    check("B débloque la bande au nom de A", unlock(tb, a), False)
+    check("B débloque la bande et la renomme ensemble", unlock(tb, b, {"name": "Pirates"}), False)
+    check("B débloque la bande avec son Pass", unlock(tb, b), True)
+    check("A réécrit le déblocage à son nom", unlock(ta, a), False)
+    check("B, simple membre, passe aux gages Chaos", dares(tb, "chaos"), False)
+    check("A, créateur, passe aux gages Vérité", dares(ta, "truth"), True)
+    check("A passe aux gages Chaos", dares(ta, "chaos"), True)
+    check("A revient aux gages classiques", dares(ta, "classic"), True)
 
     def live(tok, uid, rnd, base, is_open):
         return commit(tok, write(

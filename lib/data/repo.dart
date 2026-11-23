@@ -1,5 +1,7 @@
 import 'dart:math';
 
+import '../core/game.dart';
+
 /// Une bande d'amis.
 class Crew {
   const Crew({
@@ -9,7 +11,8 @@ class Crew {
     required this.members,
     required this.names,
     this.createdBy = '',
-    this.darePack = 'classic',
+    this.darePack = packClassic,
+    this.passBy = '',
   });
 
   final String id;
@@ -18,9 +21,25 @@ class Crew {
   final List<String> members; // uid, dans l'ordre d'arrivée
   final Map<String, String> names; // uid -> prénom
   final String createdBy; // seul le créateur choisit le type de gages
-  final String darePack; // 'classic' ou 'party' ; absent côté serveur = classic
+  final String darePack; // un de [darePacks] ; absent côté serveur = classic
+
+  /// uid du membre qui a débloqué la bande avec son Womp Pass, '' sinon.
+  final String passBy;
+
+  bool get unlocked => passBy.isNotEmpty;
 
   String nameOf(String uid) => names[uid] ?? '?';
+
+  Crew copyWith({List<String>? members, Map<String, String>? names, String? darePack, String? passBy}) => Crew(
+        id: id,
+        name: name,
+        code: code,
+        members: members ?? this.members,
+        names: names ?? this.names,
+        createdBy: createdBy,
+        darePack: darePack ?? this.darePack,
+        passBy: passBy ?? this.passBy,
+      );
 
   static Crew fromMap(String id, Map<String, dynamic> d) => Crew(
         id: id,
@@ -30,7 +49,8 @@ class Crew {
           for (final m in (d['members'] is List ? d['members'] as List : const [])) if (m is String) m,
         ],
         createdBy: d['createdBy'] is String ? d['createdBy'] as String : '',
-        darePack: d['dares'] == 'party' ? 'party' : 'classic',
+        darePack: darePacks.contains(d['dares']) ? d['dares'] as String : packClassic,
+        passBy: d['passBy'] is String ? d['passBy'] as String : '',
         names: {
           if (d['names'] is Map)
             for (final e in (d['names'] as Map).entries)
@@ -107,8 +127,16 @@ abstract class Repo {
   Future<void> leaveCrew(String crewId);
 
   /// Change le type de gages de la bande. Réservé à son créateur : lance une
-  /// exception si le serveur refuse.
+  /// exception si le serveur refuse. Les packs du Pass demandent une bande débloquée.
   Future<void> setDarePack({required String crewId, required String pack});
+
+  // ---------- Womp Pass ----------
+
+  /// L'interrupteur du Pass, réglé à la main sur le serveur. Faux en cas de doute.
+  Future<bool> passSwitch();
+
+  /// Débloque la bande au nom de ce joueur, qui a le Pass. Une seule fois par bande.
+  Future<void> unlockCrew(String crewId);
 
   // ---------- Mode instantané ----------
 

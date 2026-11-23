@@ -20,10 +20,12 @@ void main() {
     for (final e in langs.entries) {
       final s = e.value;
       // Listes alignées : le gage n°i est le même partout.
-      for (final list in [s.dares, s.partyDares]) {
+      for (final list in [s.dares, s.partyDares, s.truthDares, s.chaosDares]) {
         expect(list.length, dareCount, reason: e.key);
         expect(list.toSet().length, dareCount, reason: '${e.key}: doublon');
       }
+      expect(s.passPerks.length, const SEn().passPerks.length, reason: e.key);
+      expect({for (final p in darePacks) s.packName(p)}.length, darePacks.length, reason: e.key);
       for (final g in GameId.values) {
         expect(s.rules(g).length, const SEn().rules(g).length, reason: '${e.key} ${g.name}');
       }
@@ -45,6 +47,8 @@ void main() {
         expect(s.dareFor(crewId: 'crew-a', round: round, number: 1, pack: packClassic), s.dares[i]);
         expect(s.dareFor(crewId: 'crew-a', round: round, number: 1, pack: packParty), s.partyDares[i]);
         expect(s.dareFor(crewId: 'crew-a', round: round, number: 5, pack: packParty), s.waterRound);
+        expect(s.dareFor(crewId: 'crew-a', round: round, number: 5, pack: packTruth), s.truthDares[i]);
+        expect(s.dareFor(crewId: 'crew-a', round: round, number: 2, pack: packChaos), s.chaosDares[i]);
       }
     }
   });

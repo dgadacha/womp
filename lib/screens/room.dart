@@ -8,10 +8,12 @@ import '../config.dart';
 import '../core/game.dart';
 import '../core/games.dart';
 import '../core/live.dart';
+import '../data/pass.dart';
 import '../data/repo.dart';
 import '../l10n/strings.dart';
 import '../ui/kit.dart';
 import 'language.dart';
+import 'pass.dart';
 import 'play.dart';
 
 /// Délai entre l'ouverture d'une manche et son départ, le temps de lire les règles.
@@ -27,6 +29,7 @@ class RoomScreen extends StatefulWidget {
     required this.onLeft,
     required this.locale,
     required this.onLocale,
+    required this.pass,
     this.forcedGame,
   });
 
@@ -37,6 +40,9 @@ class RoomScreen extends StatefulWidget {
   /// Langue choisie ('' = celle du téléphone) et de quoi la changer.
   final String locale;
   final ValueChanged<String> onLocale;
+
+  /// Le Womp Pass : rien n'en apparaît tant que l'interrupteur du serveur est éteint.
+  final PassController pass;
 
   /// Jeu imposé pour les essais sur l'émulateur.
   final GameId? forcedGame;
@@ -206,18 +212,25 @@ class _RoomScreenState extends State<RoomScreen> {
   }
 
   /// Le passage aux gages à boire demande une confirmation : la bande doit être adulte.
-  Future<void> _switchDares() async {
+  /// Un pack du Pass sur une bande pas encore débloquée ouvre l'écran du Pass.
+  Future<void> _pickPack(String pack) async {
+    if (pack == _crew.darePack) return;
+    if (passPacks.contains(pack) && !_crew.unlocked) return _openPass();
     final s = S.of(context);
     final messenger = ScaffoldMessenger.of(context);
-    if (!_party) {
+    if (pack == packParty) {
       final yes = await _confirm(title: s.partyTitle, body: s.partyBody, no: s.keepClassic, yes: s.allAdults);
       if (yes != true) return;
     }
     try {
-      await _repo.setDarePack(crewId: _crew.id, pack: _party ? packClassic : packParty);
+      await _repo.setDarePack(crewId: _crew.id, pack: pack);
     } catch (_) {
       messenger.showSnackBar(SnackBar(content: Text(s.switchFailed)));
     }
+  }
+
+  void _openPass() {
+    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => PassScreen(pass: widget.pass)));
   }
 
   Future<void> _leave() async {
@@ -360,7 +373,7 @@ class _RoomScreenState extends State<RoomScreen> {
               ),
               const SizedBox(height: 6),
               Text(
-                _party ? s.partyOn : s.classicOn,
+                s.packOn(_crew.darePack),
                 style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, height: 1.3),
               ),
               if (_party)
@@ -371,10 +384,24 @@ class _RoomScreenState extends State<RoomScreen> {
                     style: const TextStyle(color: Tone.ink, fontSize: 14, fontWeight: FontWeight.w700),
                   ),
                 ),
-              if (_crew.createdBy == uid)
+              if (_crew.createdBy == uid && widget.pass.visible) ...[
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final p in darePacks)
+                      InkPill(
+                        label: passPacks.contains(p) && !_crew.unlocked ? '${s.packName(p)} · Pass' : s.packName(p),
+                        color: p == _crew.darePack ? Tone.sun : Tone.paper,
+                        onTap: () => _pickPack(p),
+                      ),
+                  ],
+                ),
+              ] else if (_crew.createdBy == uid)
                 TextButton(
                   style: TextButton.styleFrom(padding: EdgeInsets.zero, alignment: Alignment.centerLeft),
-                  onPressed: _switchDares,
+                  onPressed: () => _pickPack(_party ? packClassic : packParty),
                   child: Text(
                     _party ? s.backToClassic : s.switchToParty,
                     style: const TextStyle(
@@ -387,6 +414,10 @@ class _RoomScreenState extends State<RoomScreen> {
             ],
           ),
         ),
+        if (widget.pass.visible) ...[
+          const SizedBox(height: 12),
+          _passCard(s, uid),
+        ],
         const SizedBox(height: 16),
         Builder(
           builder: (btn) => InkButton(
@@ -402,6 +433,46 @@ class _RoomScreenState extends State<RoomScreen> {
           onTap: _busy ? null : () => _set(LiveState.start(previous)),
         ),
       ],
+    );
+  }
+
+  /// Le Pass dans le salon : de quoi l'acheter, ou qui a débloqué la bande.
+  Widget _passCard(S s, String uid) {
+    if (_crew.unlocked) {
+      return InkBox(
+        color: Tone.mint,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Overline(passName, color: Tone.ink),
+            const SizedBox(height: 6),
+            Text(
+              _crew.passBy == uid ? s.passUnlockedByYou : s.passUnlockedBy(_crew.nameOf(_crew.passBy)),
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, height: 1.3),
+            ),
+            if (_crew.createdBy != uid)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(
+                  s.passCreatorPicks(_crew.nameOf(_crew.createdBy)),
+                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+                ),
+              ),
+          ],
+        ),
+      );
+    }
+    return InkBox(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Overline(passName, color: Tone.tomato),
+          const SizedBox(height: 6),
+          Text(s.passPitch, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, height: 1.3)),
+          const SizedBox(height: 12),
+          InkButton(label: s.passSee, color: Tone.sun, textColor: Tone.ink, onTap: _openPass),
+        ],
+      ),
     );
   }
 

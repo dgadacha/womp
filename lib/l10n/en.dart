@@ -1,3 +1,4 @@
+import '../core/game.dart';
 import '../core/games.dart';
 import '../data/repo.dart';
 import 'strings.dart';
@@ -156,6 +157,56 @@ class SEn extends S {
   @override
   String get stashAllFound => 'All found';
 
+  // ---------- Womp Pass ----------
+  @override
+  String packName(String pack) => switch (pack) {
+        packParty => 'Party 18+',
+        packTruth => 'Truth',
+        packChaos => 'Chaos',
+        _ => 'Classic',
+      };
+  @override
+  String get truthOn => 'Truth dares are on: the last one answers honestly.';
+  @override
+  String get chaosOn => 'Chaos dares are on: silly, loud, and all in the room.';
+  @override
+  String get passPitch => "One purchase and your whole crew gets more dares. Your friends don't pay a thing.";
+  @override
+  String get passSee => 'See the Pass';
+  @override
+  String passUnlockedBy(String name) => 'Unlocked by $name. Truth and Chaos dares are open to the whole crew.';
+  @override
+  String get passUnlockedByYou => 'You unlocked it. Truth and Chaos dares are open to the whole crew.';
+  @override
+  String passCreatorPicks(String name) => '$name picks the dares.';
+  @override
+  String get passHeadline => 'Buy once.\nYour whole crew plays.';
+  @override
+  List<String> get passPerks => const [
+        'Two new dare packs: Truth and Chaos',
+        'Unlocks every crew you play in',
+        "Your friends don't pay a thing",
+        'One-time purchase, no subscription',
+      ];
+  @override
+  String passBuy(String price) => 'Get it for $price';
+  @override
+  String get passUnavailable => "The Pass isn't on sale right now. Try again later.";
+  @override
+  String get passOwned => 'You have the Pass. It unlocks every crew you play in.';
+  @override
+  String get passRestore => 'Restore purchases';
+  @override
+  String get passBought => 'Pass unlocked. Enjoy!';
+  @override
+  String get passPending => 'Payment pending. The Pass unlocks as soon as it goes through.';
+  @override
+  String get passFailed => "The purchase didn't go through.";
+  @override
+  String get passRestored => 'Pass restored.';
+  @override
+  String get passNothingToRestore => 'No Pass found on this account.';
+
   // ---------- Gages ----------
   @override
   List<String> get dares => const [
@@ -181,4 +232,26 @@ class SEn extends S {
       ];
   @override
   String get waterRound => 'Water round: everyone drinks a glass of water. No dare.';
+  @override
+  List<String> get truthDares => const [
+        'Tell the crew your most embarrassing moment this year.',
+        'Read out your last web search.',
+        'Who here would you call at 3 a.m.? Say why.',
+        "What's the worst gift you ever got?",
+        'Confess a small lie you told this week.',
+        "Who here would survive a zombie apocalypse, and who wouldn't?",
+        'Tell the crew your weirdest habit.',
+        'The winner asks you any question. Answer honestly.',
+      ];
+  @override
+  List<String> get chaosDares => const [
+        'Talk only in questions until the next game.',
+        'Act out your last game in slow motion, like a replay.',
+        'The winner gives you a nickname for the rest of the night.',
+        'Commentate everything you do like a sports announcer until the next game.',
+        'Serenade the player on your left.',
+        'Walk across the room like a runway model.',
+        'Speak with an accent the winner picks until the next game.',
+        'Make up a four-line poem about the winner, right now.',
+      ];
 }

@@ -1,3 +1,4 @@
+import '../core/game.dart';
 import '../core/games.dart';
 import '../data/repo.dart';
 import 'strings.dart';
@@ -170,6 +171,57 @@ class SFr extends S {
   @override
   String get stashAllFound => 'Tout trouvé';
 
+  // ---------- Womp Pass ----------
+  @override
+  String packName(String pack) => switch (pack) {
+        packParty => 'Soirée 18+',
+        packTruth => 'Vérité',
+        packChaos => 'Chaos',
+        _ => 'Classiques',
+      };
+  @override
+  String get truthOn => 'Gages Vérité activés$_n: le dernier répond franchement.';
+  @override
+  String get chaosOn => 'Gages Chaos activés$_n: absurdes, bruyants, et sans sortir de la pièce.';
+  @override
+  String get passPitch => 'Un seul achat, et toute ta bande a plus de gages. Tes amis ne paient rien.';
+  @override
+  String get passSee => 'Voir le Pass';
+  @override
+  String passUnlockedBy(String name) =>
+      'Débloqué par $name. Les gages Vérité et Chaos sont ouverts à toute la bande.';
+  @override
+  String get passUnlockedByYou => "Tu l'as débloqué. Les gages Vérité et Chaos sont ouverts à toute la bande.";
+  @override
+  String passCreatorPicks(String name) => '$name choisit les gages.';
+  @override
+  String get passHeadline => 'Un seul achat.\nToute ta bande joue.';
+  @override
+  List<String> get passPerks => const [
+        'Deux nouveaux packs de gages$_n: Vérité et Chaos',
+        'Débloque toutes les bandes où tu joues',
+        'Tes amis ne paient rien',
+        'Achat unique, sans abonnement',
+      ];
+  @override
+  String passBuy(String price) => 'Acheter pour $price';
+  @override
+  String get passUnavailable => "Le Pass n'est pas en vente pour le moment. Réessaie plus tard.";
+  @override
+  String get passOwned => 'Tu as le Pass. Il débloque toutes les bandes où tu joues.';
+  @override
+  String get passRestore => 'Restaurer mes achats';
+  @override
+  String get passBought => 'Pass débloqué. Amusez-vous bien$_n!';
+  @override
+  String get passPending => "Paiement en attente. Le Pass se débloque dès qu'il est validé.";
+  @override
+  String get passFailed => "L'achat n'est pas passé.";
+  @override
+  String get passRestored => 'Pass retrouvé.';
+  @override
+  String get passNothingToRestore => 'Aucun Pass trouvé sur ce compte.';
+
   // ---------- Gages ----------
   @override
   List<String> get dares => const [
@@ -195,4 +247,26 @@ class SFr extends S {
       ];
   @override
   String get waterRound => "Pause eau$_n: tout le monde boit un verre d'eau. Pas de gage.";
+  @override
+  List<String> get truthDares => const [
+        "Raconte ton moment le plus gênant de l'année.",
+        'Lis à voix haute ta dernière recherche sur internet.',
+        'Qui ici appellerais-tu à 3 h du matin$_n? Dis pourquoi.',
+        "Quel est le pire cadeau qu'on t'ait fait$_n?",
+        'Avoue un petit mensonge que tu as dit cette semaine.',
+        'Qui ici survivrait à une apocalypse zombie, et qui non$_n?',
+        'Raconte ta manie la plus bizarre.',
+        "Le gagnant te pose une question, n'importe laquelle. Réponds franchement.",
+      ];
+  @override
+  List<String> get chaosDares => const [
+        "Ne parle qu'en questions jusqu'au prochain jeu.",
+        'Rejoue ton dernier jeu au ralenti, façon replay.',
+        'Le gagnant te donne un surnom pour le reste de la soirée.',
+        "Commente tout ce que tu fais comme un journaliste sportif jusqu'au prochain jeu.",
+        'Chante une sérénade au joueur à ta gauche.',
+        'Traverse la pièce comme un mannequin en plein défilé.',
+        "Parle avec l'accent choisi par le gagnant jusqu'au prochain jeu.",
+        'Invente tout de suite un poème de quatre vers sur le gagnant.',
+      ];
 }

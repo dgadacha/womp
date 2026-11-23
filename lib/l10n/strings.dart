@@ -106,11 +106,46 @@ abstract class S {
   String get stashMissed;
   String get stashAllFound;
 
+  // ---------- Womp Pass ----------
+  String packName(String pack);
+  String get truthOn;
+  String get chaosOn;
+  String get passPitch;
+  String get passSee;
+  String passUnlockedBy(String name);
+  String get passUnlockedByYou;
+  String passCreatorPicks(String name);
+  String get passHeadline;
+
+  /// Ce que le Pass apporte, affiché avant l'achat.
+  List<String> get passPerks;
+  String passBuy(String price);
+  String get passUnavailable;
+  String get passOwned;
+  String get passRestore;
+  String get passBought;
+  String get passPending;
+  String get passFailed;
+  String get passRestored;
+  String get passNothingToRestore;
+
+  /// Phrase sous le titre « Gages » du salon, selon le pack choisi.
+  String packOn(String pack) => switch (pack) {
+        packParty => partyOn,
+        packTruth => truthOn,
+        packChaos => chaosOn,
+        _ => classicOn,
+      };
+
   // ---------- Gages ----------
   // Listes fermées, toutes de [dareCount] éléments, dans le même ordre.
   List<String> get dares;
   List<String> get partyDares;
   String get waterRound;
+
+  /// Packs du Womp Pass. Restent dans la pièce, sans alcool.
+  List<String> get truthDares;
+  List<String> get chaosDares;
 
   /// Gage d'une manche : le même pour toute la bande.
   String dareFor({
@@ -120,7 +155,12 @@ abstract class S {
     required String pack,
   }) {
     if (isWaterRound(pack, number)) return waterRound;
-    final list = pack == packParty ? partyDares : dares;
+    final list = switch (pack) {
+      packParty => partyDares,
+      packTruth => truthDares,
+      packChaos => chaosDares,
+      _ => dares,
+    };
     return list[liveDareIndex(crewId, round)];
   }
 }

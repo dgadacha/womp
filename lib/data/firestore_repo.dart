@@ -122,6 +122,19 @@ class FirestoreRepo implements Repo {
   Future<void> setDarePack({required String crewId, required String pack}) =>
       _crew(crewId).update({'dares': pack});
 
+  @override
+  Future<bool> passSwitch() async {
+    try {
+      final doc = await _db.collection('config').doc('app').get();
+      return doc.data()?['pass'] == true;
+    } catch (_) {
+      return false; // document absent, règles pas encore déployées, hors ligne : Pass caché
+    }
+  }
+
+  @override
+  Future<void> unlockCrew(String crewId) => _crew(crewId).update({'passBy': uid});
+
   DocumentReference<Map<String, dynamic>> _live(String crewId) =>
       _crew(crewId).collection('live').doc('state');
 
