@@ -1,15 +1,18 @@
 import 'game.dart';
 
-/// Les mini-jeux. Un seul par jour, le même pour tout le monde.
-enum GameId { snap, spot, stop }
+/// Les mini-jeux. Ils tournent de manche en manche, le même pour toute la bande.
+enum GameId { snap, spot, stop, stash }
 
-/// Ordre de rotation. Attention : y ajouter un jeu décale tous les jours suivants,
-/// et deux versions de l'app ne joueraient plus au même jeu le même jour.
-const rotation = [GameId.snap, GameId.spot, GameId.stop];
+/// Ordre de rotation. Attention : y ajouter un jeu change l'enchaînement, et deux
+/// versions de l'app ne joueraient plus au même jeu à la même manche.
+const rotation = [GameId.snap, GameId.spot, GameId.stop, GameId.stash];
 
-GameId gameOfDay(String day) => rotation[dayNumber(day) % rotation.length];
-
-String gameTitle(GameId g) => switch (g) { GameId.snap => 'Snap', GameId.spot => 'Spot', GameId.stop => 'Stop' };
+String gameTitle(GameId g) => switch (g) {
+      GameId.snap => 'Snap',
+      GameId.spot => 'Spot',
+      GameId.stop => 'Stop',
+      GameId.stash => 'Stash',
+    };
 
 GameId? gameNamed(String name) {
   for (final g in GameId.values) {
@@ -94,3 +97,42 @@ int stopPoints(StopRound round, double pos) {
   if (rel < 0 || rel > 1) return -1;
   return (rel - 0.5).abs() <= 1 / 6 ? 3 : 1;
 }
+
+// ---------- Stash : retenir les cases allumées ----------
+
+class StashPattern {
+  const StashPattern(this.cols, this.cells, this.showMs);
+  final int cols; // grille cols x cols
+  final List<int> cells; // cases à retenir, toutes différentes
+  final int showMs; // durée d'affichage avant de cacher
+
+  int get count => cols * cols;
+}
+
+/// 24 grilles au plus. Chaque case retrouvée vaut 1 point : le total possible (142)
+/// reste sous la borne des règles sans avoir à écrêter, donc sans égalité forcée.
+const stashCount = 24;
+
+int _stashTiles(int i) {
+  final n = 3 + (i + 1) ~/ 3;
+  return n > 7 ? 7 : n;
+}
+
+List<StashPattern> buildStashPlan(String day) {
+  final r = Rng(hashText('stash-$day'));
+  return [
+    for (var i = 0; i < stashCount; i++)
+      () {
+        final cols = i < 5 ? 3 : (i < 11 ? 4 : 5);
+        // Tirage sans remise : on pioche dans la liste des cases encore libres.
+        final free = [for (var c = 0; c < cols * cols; c++) c];
+        final cells = [
+          for (var k = 0; k < _stashTiles(i); k++) free.removeAt((r.next() * free.length).floor()),
+        ];
+        final show = 1100 - 25 * i;
+        return StashPattern(cols, cells, show < 700 ? 700 : show);
+      }(),
+  ];
+}
+
+int stashMaxScore(List<StashPattern> plan) => plan.fold(0, (s, p) => s + p.cells.length);

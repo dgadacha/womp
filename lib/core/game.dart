@@ -1,6 +1,3 @@
-import 'dart:convert';
-
-import '../config.dart';
 
 /// Générateur déterministe sur 32 bits : même graine, même partie sur tous les téléphones.
 class Rng {
@@ -96,24 +93,7 @@ int dayNumber(String day) {
   return DateTime.utc(d.year, d.month, d.day).millisecondsSinceEpoch ~/ 86400000;
 }
 
-const _weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-const _months = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
-];
-
-String prettyDay(String day) {
-  final d = dateOf(day);
-  return '${_weekdays[d.weekday - 1]}, ${_months[d.month - 1]} ${d.day}';
-}
-
-String ordinal(int n) {
-  final m100 = n % 100;
-  if (m100 >= 11 && m100 <= 13) return '${n}th';
-  return switch (n % 10) { 1 => '${n}st', 2 => '${n}nd', 3 => '${n}rd', _ => '${n}th' };
-}
-
-// ---------- Noms et codes de défi ----------
+// ---------- Noms ----------
 
 final _badChars = RegExp(r"[^\p{L}\p{N} '\-]", unicode: true);
 
@@ -122,92 +102,13 @@ String cleanName(String raw) {
   return s.length > 12 ? s.substring(0, 12).trim() : s;
 }
 
-class Challenge {
-  const Challenge(this.day, this.scores);
-  final String day;
-  final Map<String, int> scores;
-}
+// ---------- Gages ----------
+// Les textes des gages sont dans lib/l10n, une liste par langue, toutes alignées.
 
-String encodeChallenge(String day, Map<String, int> scores) {
-  final body = [day, ...scores.entries.map((e) => '${e.key}:${e.value}')].join('|');
-  return '$codePrefix.${base64Url.encode(utf8.encode(body)).replaceAll('=', '')}';
-}
+/// Nombre de gages dans chaque liste, quelle que soit la langue.
+const dareCount = 8;
 
-final _codeRe = RegExp('$codePrefix\\.([A-Za-z0-9_-]{8,800})');
+const packClassic = 'classic';
+const packParty = 'party';
+const darePacks = [packClassic, packParty];
 
-/// Lit un code collé seul ou au milieu d'un message. Le contenu vient d'ailleurs :
-/// tout est borné et nettoyé. Retourne null si le code ne tient pas debout.
-Challenge? decodeChallenge(String text) {
-  if (text.length > 4000) return null;
-  final m = _codeRe.firstMatch(text);
-  if (m == null) return null;
-  try {
-    var b = m.group(1)!;
-    while (b.length % 4 != 0) {
-      b += '=';
-    }
-    final parts = utf8.decode(base64Url.decode(b)).split('|');
-    if (parts.isEmpty || !isDayKey(parts.first)) return null;
-    final scores = <String, int>{};
-    for (final part in parts.skip(1).take(20)) {
-      final i = part.lastIndexOf(':');
-      if (i < 1) continue;
-      final name = cleanName(part.substring(0, i));
-      final pts = int.tryParse(part.substring(i + 1));
-      if (name.isEmpty || pts == null || pts < -500 || pts > 999) continue;
-      scores[name] = pts;
-    }
-    return Challenge(parts.first, scores);
-  } catch (_) {
-    return null;
-  }
-}
-
-// ---------- Bande ----------
-
-class Player {
-  const Player(this.name, this.score, {this.isMe = false, this.isDemo = false});
-  final String name;
-  final int score;
-  final bool isMe;
-  final bool isDemo;
-}
-
-const _demoNames = ['Maya', 'Leo', 'Zoe', 'Sam'];
-
-/// Joueurs fictifs, tant qu'aucun vrai score n'est arrivé par un code.
-List<Player> demoCrew(String day, int max) {
-  final r = Rng(hashText('demo-$day'));
-  return [
-    for (final n in _demoNames) Player(n, (max * (0.38 + r.next() * 0.42)).round(), isDemo: true),
-  ];
-}
-
-List<Player> ranking({
-  required String day,
-  required int max,
-  required Map<String, int> friends,
-  String? myName,
-  int? myScore,
-}) {
-  final list = friends.isEmpty
-      ? demoCrew(day, max)
-      : [for (final e in friends.entries) Player(e.key, e.value)];
-  if (myScore != null) list.add(Player(myName ?? 'Me', myScore, isMe: true));
-  list.sort((a, b) => b.score.compareTo(a.score));
-  return list;
-}
-
-/// Liste fermée et relue : jamais de gage en texte libre.
-const dares = [
-  'Bring snacks for the whole crew.',
-  'Speak only in rhymes for ten minutes.',
-  'Wear mismatched socks on Monday.',
-  'Give every crew member a sincere compliment.',
-  'Sing the chorus the winner picks.',
-  'Keep the profile pic the crew picks for 24 hours.',
-  'Do the animal impression the winner picks, for ten seconds.',
-  'Send a voice note as a weather presenter.',
-];
-
-String dareOfWeek(String day) => dares[(dayNumber(day) ~/ 7) % dares.length];

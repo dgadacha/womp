@@ -29,8 +29,6 @@ class FirestoreRepo implements Repo {
 
   DocumentReference<Map<String, dynamic>> _crew(String id) => _db.collection('crews').doc(id);
   DocumentReference<Map<String, dynamic>> get _me => _db.collection('users').doc(uid);
-  CollectionReference<Map<String, dynamic>> _day(String crewId, String day, String what) =>
-      _crew(crewId).collection('days').doc(day).collection(what);
 
   @override
   Future<Crew?> myCrew() async {
@@ -68,7 +66,14 @@ class FirestoreRepo implements Repo {
         ..set(_me, {'crewId': ref.id, 'name': myName});
       try {
         await batch.commit();
-        return Crew(id: ref.id, name: crewName, code: code, members: [uid], names: {uid: myName});
+        return Crew(
+          id: ref.id,
+          name: crewName,
+          code: code,
+          members: [uid],
+          names: {uid: myName},
+          createdBy: uid,
+        );
       } on FirebaseException catch (e) {
         if (e.code != 'permission-denied') rethrow;
         last = e;
@@ -108,46 +113,64 @@ class FirestoreRepo implements Repo {
       .map((d) => Crew.fromMap(d.id, d.data()!));
 
   @override
-  Stream<Map<String, int>> watchScores(String crewId, String day) =>
-      _day(crewId, day, 'scores').snapshots().map((snap) => {
+  Future<void> leaveCrew(String crewId) async {
+    await _crew(crewId).update({'members': FieldValue.arrayRemove([uid])});
+    await _me.update({'crewId': ''});
+  }
+
+  @override
+  Future<void> setDarePack({required String crewId, required String pack}) =>
+      _crew(crewId).update({'dares': pack});
+
+  DocumentReference<Map<String, dynamic>> _live(String crewId) =>
+      _crew(crewId).collection('live').doc('state');
+
+  CollectionReference<Map<String, dynamic>> _liveScores(String crewId, int round) =>
+      _live(crewId).collection('rounds').doc('$round').collection('scores');
+
+  @override
+  Stream<LiveState?> watchLive(String crewId) => _live(crewId).snapshots().map((d) {
+        final data = d.data();
+        if (data == null || data['round'] is! int) return null;
+        return LiveState(
+          round: data['round'] as int,
+          base: data['base'] is int ? data['base'] as int : data['round'] as int,
+          open: data['open'] == true,
+        );
+      });
+
+  @override
+  Future<void> setLive({required String crewId, required LiveState state}) => _live(crewId).set({
+        'round': state.round,
+        'base': state.base,
+        'open': state.open,
+        'by': uid,
+        'at': FieldValue.serverTimestamp(),
+      });
+
+  @override
+  Stream<Map<String, int>> watchLiveScores(String crewId, int round) =>
+      _liveScores(crewId, round).snapshots().map((snap) => {
             for (final d in snap.docs)
               if (d.data()['score'] is int) d.id: d.data()['score'] as int,
           });
 
   @override
-  Future<void> postScore({
+  Future<void> postLiveScore({
     required String crewId,
-    required String day,
+    required int round,
     required String name,
     required int score,
   }) async {
     try {
-      await _day(crewId, day, 'scores').doc(uid).set({
+      await _liveScores(crewId, round).doc(uid).set({
         'name': name,
         'score': score,
         'at': FieldValue.serverTimestamp(),
       });
     } on FirebaseException catch (e) {
-      // Déjà un score ce jour-là : le premier reste, c'est la règle du jeu.
+      // Manche déjà passée ou score déjà posté : on laisse tomber.
       if (e.code != 'permission-denied') rethrow;
     }
   }
-
-  @override
-  Stream<Map<String, Set<String>>> watchReactions(String crewId, String day) =>
-      _day(crewId, day, 'reactions').snapshots().map((snap) => {
-            for (final d in snap.docs)
-              d.id: {
-                for (final p in (d.data()['picks'] is List ? d.data()['picks'] as List : const []))
-                  if (p is String) p,
-              },
-          });
-
-  @override
-  Future<void> setReactions({
-    required String crewId,
-    required String day,
-    required Set<String> picks,
-  }) =>
-      _day(crewId, day, 'reactions').doc(uid).set({'picks': picks.take(40).toList()});
 }

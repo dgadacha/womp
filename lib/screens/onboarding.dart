@@ -4,17 +4,30 @@ import 'package:flutter/services.dart';
 import '../config.dart';
 import '../core/game.dart';
 import '../data/repo.dart';
+import '../l10n/strings.dart';
 import '../ui/kit.dart';
+import 'language.dart';
 
 /// Premier lancement : un prénom, puis on crée sa bande ou on en rejoint une.
 class OnboardingScreen extends StatefulWidget {
-  const OnboardingScreen({super.key, required this.onCreate, required this.onJoin, this.name = ''});
+  const OnboardingScreen({
+    super.key,
+    required this.onCreate,
+    required this.onJoin,
+    required this.locale,
+    required this.onLocale,
+    this.name = '',
+  });
 
   final String name;
 
-  /// Les deux retournent un message d'erreur, ou null si tout s'est bien passé.
-  final Future<String?> Function(String name) onCreate;
-  final Future<String?> Function(String name, String code) onJoin;
+  /// Langue choisie ('' = celle du téléphone) et de quoi la changer.
+  final String locale;
+  final ValueChanged<String> onLocale;
+
+  /// Les deux retournent le problème rencontré, ou null si tout s'est bien passé.
+  final Future<JoinProblem?> Function(String name, String crewName) onCreate;
+  final Future<JoinProblem?> Function(String name, String code) onJoin;
 
   @override
   State<OnboardingScreen> createState() => _OnboardingScreenState();
@@ -24,7 +37,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   late final _name = TextEditingController(text: widget.name);
   final _code = TextEditingController(text: initialJoin);
   bool _busy = false;
-  String? _error;
+  JoinProblem? _error;
 
   @override
   void dispose() {
@@ -33,7 +46,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     super.dispose();
   }
 
-  Future<void> _run(Future<String?> Function() action) async {
+  Future<void> _run(Future<JoinProblem?> Function() action) async {
     FocusScope.of(context).unfocus();
     setState(() {
       _busy = true;
@@ -49,7 +62,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     final name = cleanName(_name.text);
+    // Les règles du serveur limitent le nom de bande à 24 caractères.
+    final crewName = s.crewNameFor(name);
+    final shortCrewName = crewName.length > 24 ? crewName.substring(0, 24) : crewName;
     final code = normalizeCode(_code.text);
     final ready = name.isNotEmpty && !_busy;
 
@@ -60,16 +77,22 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Align(alignment: Alignment.centerLeft, child: Logo(name: appName)),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Logo(name: appName),
+                  LanguageButton(current: widget.locale, onPick: widget.onLocale),
+                ],
+              ),
               const SizedBox(height: 24),
-              const Text(
-                'One tiny game a day.\nLast place takes the dare.',
-                style: TextStyle(fontSize: 30, fontWeight: FontWeight.w900, letterSpacing: -1, height: 1.1),
+              Text(
+                s.tagline,
+                style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w900, letterSpacing: -1, height: 1.1),
               ),
               const SizedBox(height: 20),
               _Field(
-                label: 'Your first name',
-                hint: 'e.g. Maya',
+                label: s.firstNameLabel,
+                hint: s.firstNameHint,
                 controller: _name,
                 onChanged: () => setState(() {}),
                 capitalization: TextCapitalization.words,
@@ -81,13 +104,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const Text(
-                      'A friend invited you?',
-                      style: TextStyle(fontSize: 19, fontWeight: FontWeight.w900),
+                    Text(
+                      s.friendInvited,
+                      style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w900),
                     ),
                     const SizedBox(height: 10),
                     _Field(
-                      label: 'Crew code',
+                      label: s.crewCodeLabel,
                       hint: 'ABC234',
                       controller: _code,
                       onChanged: () => setState(() {}),
@@ -97,7 +120,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     ),
                     const SizedBox(height: 12),
                     InkButton(
-                      label: 'Join the crew',
+                      label: s.joinCrew,
                       color: Tone.ink,
                       onTap: ready && code != null
                           ? () => _run(() => widget.onJoin(name, code))
@@ -110,14 +133,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 Padding(
                   padding: const EdgeInsets.only(top: 10),
                   child: Text(
-                    _error!,
+                    s.joinProblem(_error!),
                     style: const TextStyle(color: Tone.tomato, fontSize: 16, fontWeight: FontWeight.w800),
                   ),
                 ),
               const SizedBox(height: 16),
               InkButton(
-                label: _busy ? 'One sec…' : 'Start a new crew',
-                onTap: ready ? () => _run(() => widget.onCreate(name)) : null,
+                label: _busy ? s.oneSec : s.startCrew,
+                onTap: ready ? () => _run(() => widget.onCreate(name, shortCrewName)) : null,
               ),
             ],
           ),

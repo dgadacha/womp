@@ -8,12 +8,10 @@ import json
 import sys
 import urllib.error
 import urllib.request
-from datetime import date
 
 AUTH = "http://localhost:9199/identitytoolkit.googleapis.com/v1/accounts:signUp?key=demo"
 BASE = "http://localhost:8180/v1"
 ROOT = "projects/demo-womp/databases/(default)/documents"
-TODAY = date.today().isoformat()
 
 results = []
 
@@ -101,12 +99,6 @@ def join(uid, tok, crew_id, name="Bo", as_uid=None):
     ))
 
 
-def score(tok, crew_id, uid, value, day=TODAY, name="Bo"):
-    return commit(tok, write(
-        f"crews/{crew_id}/days/{day}/scores/{uid}", {"name": name, "score": value},
-        server_time="at",
-    ))
-
 
 def main():
     import random
@@ -127,8 +119,6 @@ def main():
     check("B réécrit l'invitation de A", commit(tb, write(f"invites/{code}", {"crewId": "ailleurs"})), False)
     check("B lit le profil de A", get(tb, f"users/{a}"), False)
 
-    check("C, non membre, lit les scores", get(tc, f"crews/{crew}/days/{TODAY}/scores/{a}"), False)
-    check("C, non membre, poste un score", score(tc, crew, c, 5), False)
     check("B ajoute C à la bande à sa place", join(b, tb, crew, as_uid=c), False)
 
     check("B rejoint la bande", join(b, tb, crew), True)
@@ -139,19 +129,61 @@ def main():
     check("B renomme la bande", commit(tb, write(f"crews/{crew}", {"name": "Pirates"}, exists=True, mask=["name"])), False)
     check("B met un prénom de 40 lettres", commit(tb, write(f"crews/{crew}", {"names": {b: "x" * 40}}, exists=True, mask=[f"names.`{b}`"])), False)
 
-    check("B poste un score hors bornes (9999)", score(tb, crew, b, 9999), False)
-    check("B poste un score pour un jour passé", score(tb, crew, b, 5, day="2020-01-01"), False)
-    check("B poste un score pour un jour futur", score(tb, crew, b, 5, day="2099-01-01"), False)
-    check("B poste un score au nom de A", score(tb, crew, a, 5), False)
-    check("B poste son score du jour", score(tb, crew, b, 17), True)
-    check("B remplace son score du jour", score(tb, crew, b, 60), False)
-    check("A lit le score de B", get(ta, f"crews/{crew}/days/{TODAY}/scores/{b}"), True)
 
-    react = f"crews/{crew}/days/{TODAY}/reactions"
-    check("B pose ses réactions", commit(tb, write(f"{react}/{b}", {"picks": [f"{a}|🔥"]})), True)
-    check("B écrit les réactions de A", commit(tb, write(f"{react}/{a}", {"picks": ["x"]})), False)
-    check("B pose 41 réactions", commit(tb, write(f"{react}/{b}", {"picks": [str(i) for i in range(41)]})), False)
-    check("C, non membre, lit les réactions", get(tc, f"{react}/{b}"), False)
+    dares = lambda tok, value, extra=None: commit(tok, write(
+        f"crews/{crew}", {"dares": value, **(extra or {})}, exists=True,
+        mask=["dares"] + list((extra or {}).keys()),
+    ))
+    check("A, créateur, passe aux gages à boire", dares(ta, "party"), True)
+    check("A revient aux gages classiques", dares(ta, "classic"), True)
+    check("B, simple membre, change les gages", dares(tb, "party"), False)
+    check("C, non membre, change les gages", dares(tc, "party"), False)
+    check("A met un type de gages inconnu", dares(ta, "vodka"), False)
+    check("A change les gages et le nom de la bande ensemble", dares(ta, "party", {"name": "Pirates"}), False)
+
+    def live(tok, uid, rnd, base, is_open):
+        return commit(tok, write(
+            f"crews/{crew}/live/state", {"round": rnd, "base": base, "open": is_open, "by": uid},
+            server_time="at",
+        ))
+
+    def live_score(tok, uid, rnd, value):
+        return commit(tok, write(
+            f"crews/{crew}/live/state/rounds/{rnd}/scores/{uid}", {"name": "Bo", "score": value},
+            server_time="at",
+        ))
+
+    check("C, non membre, lance le mode instantané", live(tc, c, 1, 1, True), False)
+    check("B poste un score avant toute session", live_score(tb, b, 1, 5), False)
+    check("B lance le mode instantané en sautant à la manche 5", live(tb, b, 5, 5, True), False)
+    check("B lance le mode instantané (manche 1)", live(tb, b, 1, 1, True), True)
+    check("C, non membre, lit l'état du mode instantané", get(tc, f"crews/{crew}/live/state"), False)
+    check("A poste son score de la manche 1", live_score(ta, a, 1, 12), True)
+    check("A remplace son score de la manche 1", live_score(ta, a, 1, 99), False)
+    check("B poste un score au nom de A", live_score(tb, a, 1, 3), False)
+    check("B poste un score pour la manche 2, pas encore ouverte", live_score(tb, b, 2, 5), False)
+    check("B poste un score hors bornes", live_score(tb, b, 1, 9999), False)
+    check("C, non membre, poste un score de manche", live_score(tc, c, 1, 5), False)
+    check("A passe au jeu suivant (manche 2)", live(ta, a, 2, 1, True), True)
+    check("B poste en retard un score pour la manche 1", live_score(tb, b, 1, 5), False)
+    check("B revient à la manche 1", live(tb, b, 1, 1, True), False)
+    check("B saute à la manche 9", live(tb, b, 9, 1, True), False)
+    check("B signe le changement au nom de A", live(tb, a, 3, 1, True), False)
+    check("B termine la session", live(tb, b, 2, 1, False), True)
+    check("A poste un score après la fin de la session", live_score(ta, a, 2, 5), False)
+    check("A relance une session (manche 3)", live(ta, a, 3, 3, True), True)
+    check("B lit les scores de la manche 1", get(tb, f"crews/{crew}/live/state/rounds/1/scores/{a}"), True)
+
+    # Quitter la bande, puis y revenir.
+    leave = lambda tok, members: commit(tok, write(f"crews/{crew}", {"members": members}, exists=True, mask=["members"]))
+    _, doc = call("GET", f"{BASE}/{ROOT}/crews/{crew}", ta)
+    members = [v["stringValue"] for v in doc["fields"]["members"]["arrayValue"]["values"]]
+    check("C, non membre, « quitte » la bande", leave(tc, members), False)
+    check("B retire A en même temps que lui", leave(tb, [m for m in members if m not in (a, b)]), False)
+    check("B quitte la bande", leave(tb, [m for m in members if m != b]), True)
+    check("B, parti, lit la bande", get(tb, f"crews/{crew}"), False)
+    check("B, parti, poste un score de manche", live_score(tb, b, 3, 5), False)
+    check("B revient avec le code", join(b, tb, crew), True)
 
     full_code = "".join(random.choice("ABCDEFGHJKLMNPQRSTUVWXYZ23456789") for _ in range(6))
     owner, towner = user()

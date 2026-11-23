@@ -8,6 +8,8 @@ class Crew {
     required this.code,
     required this.members,
     required this.names,
+    this.createdBy = '',
+    this.darePack = 'classic',
   });
 
   final String id;
@@ -15,6 +17,8 @@ class Crew {
   final String code; // code d'invitation à 6 caractères
   final List<String> members; // uid, dans l'ordre d'arrivée
   final Map<String, String> names; // uid -> prénom
+  final String createdBy; // seul le créateur choisit le type de gages
+  final String darePack; // 'classic' ou 'party' ; absent côté serveur = classic
 
   String nameOf(String uid) => names[uid] ?? '?';
 
@@ -25,6 +29,8 @@ class Crew {
         members: [
           for (final m in (d['members'] is List ? d['members'] as List : const [])) if (m is String) m,
         ],
+        createdBy: d['createdBy'] is String ? d['createdBy'] as String : '',
+        darePack: d['dares'] == 'party' ? 'party' : 'classic',
         names: {
           if (d['names'] is Map)
             for (final e in (d['names'] as Map).entries)
@@ -33,18 +39,33 @@ class Crew {
       );
 }
 
+/// État du mode instantané d'une bande. Le numéro de manche ne redescend jamais :
+/// [base] est la première manche de la session en cours.
+class LiveState {
+  const LiveState({required this.round, required this.base, required this.open});
+  final int round;
+  final int base;
+  final bool open;
+
+  /// Rang du jeu dans la session : 1, 2, 3...
+  int get number => round - base + 1;
+
+  /// Première manche d'une nouvelle session.
+  static LiveState start(LiveState? previous) {
+    final round = (previous?.round ?? 0) + 1;
+    return LiveState(round: round, base: round, open: true);
+  }
+
+  LiveState next() => LiveState(round: round + 1, base: base, open: true);
+  LiveState end() => LiveState(round: round, base: base, open: false);
+}
+
 enum JoinProblem { badCode, unknownCode, fullOrRefused, offline }
 
 class JoinFailure implements Exception {
   const JoinFailure(this.problem);
   final JoinProblem problem;
 
-  String get message => switch (problem) {
-        JoinProblem.badCode => 'A crew code is 6 letters and digits.',
-        JoinProblem.unknownCode => 'No crew has that code.',
-        JoinProblem.fullOrRefused => "That crew is full (12 max).",
-        JoinProblem.offline => "Can't reach Womp. Check your connection.",
-      };
 }
 
 const maxCrewSize = 12;
@@ -82,23 +103,30 @@ abstract class Repo {
 
   Stream<Crew> watchCrew(String crewId);
 
-  /// uid -> score du jour.
-  Stream<Map<String, int>> watchScores(String crewId, String day);
+  /// Quitte la bande : on n'en est plus membre, et l'app repart de l'accueil.
+  Future<void> leaveCrew(String crewId);
 
-  /// Un seul score par joueur et par jour : un second envoi est ignoré.
-  Future<void> postScore({
+  /// Change le type de gages de la bande. Réservé à son créateur : lance une
+  /// exception si le serveur refuse.
+  Future<void> setDarePack({required String crewId, required String pack});
+
+  // ---------- Mode instantané ----------
+
+  /// null tant que la bande n'a jamais lancé le mode instantané.
+  Stream<LiveState?> watchLive(String crewId);
+
+  /// Démarre une session, passe au jeu suivant ou termine. Le serveur vérifie
+  /// que la transition est permise et lance une exception sinon.
+  Future<void> setLive({required String crewId, required LiveState state});
+
+  /// uid -> score de la manche.
+  Stream<Map<String, int>> watchLiveScores(String crewId, int round);
+
+  /// Un seul score par joueur et par manche. Ignoré si la manche est déjà passée.
+  Future<void> postLiveScore({
     required String crewId,
-    required String day,
+    required int round,
     required String name,
     required int score,
-  });
-
-  /// uid de celui qui réagit -> ses réactions, sous la forme « uidCible|emoji ».
-  Stream<Map<String, Set<String>>> watchReactions(String crewId, String day);
-
-  Future<void> setReactions({
-    required String crewId,
-    required String day,
-    required Set<String> picks,
   });
 }

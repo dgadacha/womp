@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../core/games.dart';
+import '../l10n/strings.dart';
 import '../ui/kit.dart';
 import 'round.dart';
 
@@ -75,9 +76,8 @@ class _StopGameState extends State<StopGame>
         final round = widget.plan[_round];
         final pos = _frozen ?? stopPosition(round, ms - _roundStart);
         final width = arena.width - 24;
-        final feedback = _frozen == null
-            ? ''
-            : switch (_lastPoints) { 3 => '+3  Perfect', 1 => '+1  Nice', _ => '−1  Miss' };
+        final s = S.of(context);
+        final feedback = _frozen == null ? '' : s.stopFeedback(_lastPoints);
         return Listener(
           behavior: HitTestBehavior.opaque,
           onPointerDown: (_) => _tap(),
@@ -85,7 +85,7 @@ class _StopGameState extends State<StopGame>
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Overline('Bar ${_round + 1} of ${widget.plan.length}'),
+                Overline(s.stopBar(_round + 1, widget.plan.length)),
                 const SizedBox(height: 18),
                 SizedBox(
                   width: width,
@@ -147,9 +147,9 @@ class _StopGameState extends State<StopGame>
                   ),
                 ),
                 const SizedBox(height: 8),
-                const Text(
-                  'Tap anywhere to stop the bar',
-                  style: TextStyle(color: Tone.soft, fontSize: 15, fontWeight: FontWeight.w600),
+                Text(
+                  s.stopHint,
+                  style: const TextStyle(color: Tone.soft, fontSize: 15, fontWeight: FontWeight.w600),
                 ),
               ],
             ),

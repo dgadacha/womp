@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'config.dart';
 import 'core/game.dart';
@@ -8,36 +9,33 @@ import 'core/games.dart';
 import 'core/store.dart';
 import 'data/repo.dart';
 import 'firebase_config.dart' show useEmulator;
-import 'screens/crew.dart';
-import 'screens/home.dart';
+import 'l10n/strings.dart';
 import 'screens/onboarding.dart';
-import 'screens/play.dart';
+import 'screens/room.dart';
 import 'ui/kit.dart';
 
-/// Racine de l'app : connecte l'appareil, retrouve la bande, puis suit en direct
-/// la bande, les scores du jour et les réactions.
+/// Racine de l'app : connecte l'appareil, retrouve la bande et la suit en direct.
+/// Sans bande, on arrive sur l'accueil ; avec une bande, dans son salon de jeu.
 class WompApp extends StatefulWidget {
-  const WompApp({super.key, required this.store, required this.repo});
+  const WompApp({super.key, required this.store, required this.repo, this.locale});
   final Store store;
   final Repo repo;
+
+  /// Langue imposée (tests, --dart-define=LOCALE=fr). Sinon, celle du téléphone.
+  final Locale? locale;
 
   @override
   State<WompApp> createState() => _WompAppState();
 }
 
 class _WompAppState extends State<WompApp> {
-  final String _day = dayKey();
-  // Forcer un jeu fausserait le classement d'une vraie bande : seulement sur l'émulateur.
-  late final GameId _game = (useEmulator ? gameNamed(forcedGame) : null) ?? gameOfDay(_day);
-  final List<StreamSubscription<void>> _subs = [];
+  // Forcer un jeu fausserait une vraie partie : seulement sur l'émulateur.
+  final GameId? _forcedGame = useEmulator ? gameNamed(forcedGame) : null;
+  StreamSubscription<Crew>? _crewSub;
 
   bool _booting = true;
   bool _bootFailed = false;
   Crew? _crew;
-  Map<String, int>? _scores; // null tant que le premier relevé n'est pas arrivé
-  Map<String, Set<String>> _reactions = {};
-  int? _pending; // mon score, affiché avant que le serveur ne le renvoie
-  bool _playing = false;
 
   Store get _store => widget.store;
   Repo get _repo => widget.repo;
@@ -50,9 +48,7 @@ class _WompAppState extends State<WompApp> {
 
   @override
   void dispose() {
-    for (final s in _subs) {
-      s.cancel();
-    }
+    _crewSub?.cancel();
     super.dispose();
   }
 
@@ -81,24 +77,27 @@ class _WompAppState extends State<WompApp> {
   }
 
   void _enter(Crew crew) {
-    for (final s in _subs) {
-      s.cancel();
-    }
-    _subs
-      ..clear()
-      ..add(_repo.watchCrew(crew.id).listen((c) => setState(() => _crew = c), onError: (_) {}))
-      ..add(_repo.watchScores(crew.id, _day).listen((s) => setState(() => _scores = s), onError: (_) {}))
-      ..add(_repo
-          .watchReactions(crew.id, _day)
-          .listen((r) => setState(() => _reactions = r), onError: (_) {}));
+    _crewSub?.cancel();
+    _crewSub = _repo.watchCrew(crew.id).listen((c) => setState(() => _crew = c), onError: (_) {});
     setState(() {
       _crew = crew;
-      _scores = null;
       _booting = false;
     });
   }
 
-  Future<String?> _join(Future<Crew> Function() action, String name) async {
+  void _left() {
+    _crewSub?.cancel();
+    _crewSub = null;
+    setState(() => _crew = null);
+  }
+
+  void _setLocale(String code) {
+    _store.locale = code;
+    _store.save();
+    setState(() {});
+  }
+
+  Future<JoinProblem?> _join(Future<Crew> Function() action, String name) async {
     try {
       final crew = await action();
       _store.name = name;
@@ -106,68 +105,36 @@ class _WompAppState extends State<WompApp> {
       if (mounted) _enter(crew);
       return null;
     } on JoinFailure catch (e) {
-      return e.message;
+      return e.problem;
     } catch (_) {
-      return const JoinFailure(JoinProblem.offline).message;
+      return JoinProblem.offline;
     }
-  }
-
-  void _finishRound(int score) {
-    final crew = _crew!;
-    _store.day(_day).me = score;
-    _store.save();
-    setState(() {
-      _pending = score;
-      _playing = false;
-    });
-    _repo
-        .postScore(crewId: crew.id, day: _day, name: crew.nameOf(_repo.uid), score: score)
-        .catchError((_) {});
-  }
-
-  void _react(Set<String> picks) {
-    setState(() => _reactions = {..._reactions, _repo.uid: picks});
-    _repo.setReactions(crewId: _crew!.id, day: _day, picks: picks).catchError((_) {});
   }
 
   Widget _screen() {
-    if (_bootFailed) return _Message(text: "Can't reach $appName.\nCheck your connection.", onRetry: _boot);
+    if (_bootFailed) return _Message(failed: true, onRetry: _boot);
+    if (_booting) return const _Message();
     final crew = _crew;
-    if (_booting || (crew != null && _scores == null)) return const _Message();
     if (crew == null) {
       return OnboardingScreen(
         name: _store.name.isNotEmpty ? _store.name : cleanName(initialName),
-        onCreate: (name) => _join(
-          () => _repo.createCrew(crewName: "$name's crew", myName: name),
+        onCreate: (name, crewName) => _join(
+          () => _repo.createCrew(crewName: crewName, myName: name),
           name,
         ),
         onJoin: (name, code) => _join(() => _repo.joinCrew(code: code, myName: name), name),
+        locale: _store.locale,
+        onLocale: _setLocale,
       );
     }
-    if (_playing) {
-      return PlayScreen(game: _game, day: _day, durationMs: roundMs, onDone: _finishRound);
-    }
-    final uid = _repo.uid;
-    // Le score du serveur fait foi : c'est le premier posté qui compte.
-    final mine = _scores![uid] ?? _pending;
-    if (mine == null) {
-      return HomeScreen(
-        crew: crew,
-        game: _game,
-        scores: _scores!,
-        day: _day,
-        streak: _store.streak(),
-        onPlay: () => setState(() => _playing = true),
-      );
-    }
-    return CrewScreen(
+    return RoomScreen(
+      key: ValueKey(crew.id),
+      repo: _repo,
       crew: crew,
-      uid: uid,
-      scores: {..._scores!, uid: mine},
-      reactions: _reactions,
-      day: _day,
-      streak: _store.streak(),
-      onReact: _react,
+      onLeft: _left,
+      locale: _store.locale,
+      onLocale: _setLocale,
+      forcedGame: _forcedGame,
     );
   }
 
@@ -182,6 +149,18 @@ class _WompAppState extends State<WompApp> {
         colorScheme: ColorScheme.fromSeed(seedColor: Tone.tomato, surface: Tone.bg),
         textTheme: ThemeData.light().textTheme.apply(bodyColor: Tone.ink, displayColor: Tone.ink),
       ),
+      // Ordre : langue imposée par un test, choix fait dans l'app, option de compilation, téléphone.
+      locale: widget.locale ??
+          (_store.locale.isNotEmpty
+              ? Locale(_store.locale)
+              : (forcedLocale.isEmpty ? null : Locale(forcedLocale))),
+      supportedLocales: S.supportedLocales,
+      localizationsDelegates: const [
+        SDelegate(),
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       home: _screen(),
     );
   }
@@ -189,12 +168,13 @@ class _WompAppState extends State<WompApp> {
 
 /// Écran d'attente, ou d'erreur avec un bouton pour réessayer.
 class _Message extends StatelessWidget {
-  const _Message({this.text, this.onRetry});
-  final String? text;
+  const _Message({this.failed = false, this.onRetry});
+  final bool failed;
   final VoidCallback? onRetry;
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     return Scaffold(
       body: SafeArea(
         child: Container(
@@ -204,17 +184,17 @@ class _Message extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               const Logo(name: appName),
-              if (text != null) ...[
+              if (failed) ...[
                 const SizedBox(height: 20),
                 Text(
-                  text!,
+                  s.cantReach,
                   textAlign: TextAlign.center,
                   style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
                 ),
               ],
               if (onRetry != null) ...[
                 const SizedBox(height: 20),
-                InkButton(label: 'Try again', onTap: onRetry),
+                InkButton(label: s.tryAgain, onTap: onRetry),
               ],
             ],
           ),

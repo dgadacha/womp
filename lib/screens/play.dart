@@ -4,6 +4,7 @@ import '../core/game.dart';
 import '../core/games.dart';
 import '../games/snap_game.dart';
 import '../games/spot_game.dart';
+import '../games/stash_game.dart';
 import '../games/stop_game.dart';
 
 /// Lance le mini-jeu du jour. La partie est tirée de la date : la même pour tous.
@@ -27,6 +28,7 @@ class PlayScreen extends StatelessWidget {
       GameId.snap => SnapGame(plan: buildPlan(day, durationMs), durationMs: durationMs, onDone: onDone),
       GameId.spot => SpotGame(plan: buildSpotPlan(day), durationMs: durationMs, onDone: onDone),
       GameId.stop => StopGame(plan: buildStopPlan(day), durationMs: durationMs, onDone: onDone),
+      GameId.stash => StashGame(plan: buildStashPlan(day), durationMs: durationMs, onDone: onDone),
     };
   }
 }

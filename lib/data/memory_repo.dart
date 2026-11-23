@@ -3,7 +3,7 @@ import 'dart:async';
 import 'repo.dart';
 
 /// Version en mémoire du serveur, pour les tests. Elle applique les mêmes règles
-/// que Firestore : un score par jour, 12 membres au plus.
+/// que Firestore : 12 membres au plus, une manche qui ne fait qu'avancer.
 class MemoryRepo implements Repo {
   MemoryRepo({this.uid = 'me'});
 
@@ -12,8 +12,6 @@ class MemoryRepo implements Repo {
 
   final Map<String, Crew> crews = {};
   final Map<String, String> crewOfUser = {};
-  final Map<String, Map<String, int>> _scores = {};
-  final Map<String, Map<String, Set<String>>> _reacts = {};
   final _changed = StreamController<void>.broadcast();
   int _next = 1;
 
@@ -40,6 +38,7 @@ class MemoryRepo implements Repo {
       code: code,
       members: names.keys.toList(),
       names: Map.of(names),
+      createdBy: names.keys.first,
     );
     crews[crew.id] = crew;
     for (final u in names.keys) {
@@ -70,6 +69,8 @@ class MemoryRepo implements Repo {
       code: crew.code,
       members: [...crew.members, if (!crew.members.contains(uid)) uid],
       names: {...crew.names, uid: myName},
+      createdBy: crew.createdBy,
+      darePack: crew.darePack,
     );
     crews[crew.id] = joined;
     crewOfUser[uid] = crew.id;
@@ -81,35 +82,80 @@ class MemoryRepo implements Repo {
   Stream<Crew> watchCrew(String crewId) => _watch(() => crews[crewId]!);
 
   @override
-  Stream<Map<String, int>> watchScores(String crewId, String day) =>
-      _watch(() => Map.of(_scores['$crewId/$day'] ?? const {}));
-
-  /// Score posé par un autre joueur (pour un test).
-  void scoreAs(String who, String crewId, String day, int score) {
-    _scores.putIfAbsent('$crewId/$day', () => {}).putIfAbsent(who, () => score);
+  Future<void> leaveCrew(String crewId) async {
+    final crew = crews[crewId]!;
+    crews[crewId] = Crew(
+      id: crew.id,
+      name: crew.name,
+      code: crew.code,
+      members: [for (final m in crew.members) if (m != uid) m],
+      names: crew.names,
+      createdBy: crew.createdBy,
+      darePack: crew.darePack,
+    );
+    crewOfUser.remove(uid);
     _bump();
   }
 
   @override
-  Future<void> postScore({
+  Future<void> setDarePack({required String crewId, required String pack}) async {
+    final crew = crews[crewId]!;
+    if (crew.createdBy != uid || (pack != 'classic' && pack != 'party')) {
+      throw StateError('permission-denied');
+    }
+    crews[crewId] = Crew(
+      id: crew.id,
+      name: crew.name,
+      code: crew.code,
+      members: crew.members,
+      names: crew.names,
+      createdBy: crew.createdBy,
+      darePack: pack,
+    );
+    _bump();
+  }
+
+  final Map<String, LiveState> _live = {};
+  final Map<String, Map<String, int>> _liveScores = {};
+
+  @override
+  Stream<LiveState?> watchLive(String crewId) => _watch(() => _live[crewId]);
+
+  @override
+  Future<void> setLive({required String crewId, required LiveState state}) async {
+    final old = _live[crewId];
+    final ok = old == null
+        ? state.round == 1 && state.base == 1 && state.open
+        : old.open
+            ? state.base == old.base &&
+                ((state.open && state.round == old.round + 1) || (!state.open && state.round == old.round))
+            : state.open && state.round == old.round + 1 && state.base == state.round;
+    if (!ok) throw StateError('permission-denied');
+    _live[crewId] = state;
+    _bump();
+  }
+
+  @override
+  Stream<Map<String, int>> watchLiveScores(String crewId, int round) =>
+      _watch(() => Map.of(_liveScores['$crewId/$round'] ?? const {}));
+
+  /// Scores d'une manche, pour vérifier un test.
+  Map<String, int> liveScores(String crewId, int round) => Map.of(_liveScores['$crewId/$round'] ?? const {});
+
+  /// Score de manche posé par un autre joueur (pour un test).
+  void liveScoreAs(String who, String crewId, int round, int score) {
+    final live = _live[crewId];
+    if (live == null || !live.open || live.round != round) return;
+    _liveScores.putIfAbsent('$crewId/$round', () => {}).putIfAbsent(who, () => score);
+    _bump();
+  }
+
+  @override
+  Future<void> postLiveScore({
     required String crewId,
-    required String day,
+    required int round,
     required String name,
     required int score,
   }) async =>
-      scoreAs(uid, crewId, day, score);
-
-  @override
-  Stream<Map<String, Set<String>>> watchReactions(String crewId, String day) =>
-      _watch(() => Map.of(_reacts['$crewId/$day'] ?? const {}));
-
-  @override
-  Future<void> setReactions({
-    required String crewId,
-    required String day,
-    required Set<String> picks,
-  }) async {
-    _reacts.putIfAbsent('$crewId/$day', () => {})[uid] = Set.of(picks);
-    _bump();
-  }
+      liveScoreAs(uid, crewId, round, score);
 }
